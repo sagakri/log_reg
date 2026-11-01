@@ -1,0 +1,25 @@
+:root { font-family: Arial, sans-serif; color: #222; background: #f2f2f2; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+.page { min-height: 100vh; padding: 32px 16px; display: grid; place-items: start center; }
+.card { width: min(100%, 520px); background: #fff; border: 1px solid #d5d5d5; padding: 24px; }
+.header { display: flex; justify-content: space-between; align-items: start; gap: 16px; border-bottom: 1px solid #ddd; padding-bottom: 16px; margin-bottom: 20px; }
+h1 { margin: 0; font-size: 24px; }
+h2 { font-size: 20px; margin: 0 0 18px; }
+.header p, .username { color: #666; margin: 6px 0 0; }
+form { display: grid; gap: 16px; }
+label { display: grid; gap: 7px; font-weight: 600; }
+input, select, textarea { width: 100%; border: 1px solid #aaa; border-radius: 3px; padding: 10px; background: #fff; }
+textarea { resize: vertical; }
+button { border: 0; border-radius: 3px; padding: 10px 14px; background: #215a9a; color: #fff; cursor: pointer; }
+button:disabled { opacity: .65; cursor: default; }
+.secondary { background: #666; white-space: nowrap; }
+.link { color: #215a9a; background: transparent; padding: 0; text-align: left; text-decoration: underline; }
+.notice { border-radius: 3px; padding: 10px; margin: 0 0 16px; }
+.success { background: #e5f4e8; color: #1e6130; }
+.error { background: #fce8e8; color: #922; }
+.field-help { color: #666; margin-top: -10px; }
+.field-error { color: #922; margin: -10px 0 0; font-size: 14px; }
+@media (max-width: 420px) { .page { padding: 16px 10px; } .card { padding: 18px; } .header { align-items: center; } }
+
