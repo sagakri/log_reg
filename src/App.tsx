@@ -79,6 +79,7 @@ export default function App() {
   async function logout() {
     setSubmitting(true)
     setError('')
+    setMessage('')
     try {
       await api.logout()
       setUser(null)
@@ -87,6 +88,9 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось выйти из системы.')
     } finally {
+      setUser(null)
+      setProfile(emptyProfile)
+      setCredentials({ username: '', password: '' })
       setSubmitting(false)
     }
   }

@@ -1,6 +1,7 @@
 import type { Credentials, ProfileData, UserProfile, Specialization } from './types'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'https://inai-col3.fishrungames.com').replace(/\/$/, '')
+const LOGGED_OUT_KEY = 'band-members-logged-out'
 let accessToken: string | null = null
 let refreshInProgress: Promise<void> | null = null
 localStorage.removeItem('band-members-access-token')
@@ -59,6 +60,7 @@ async function refreshAccess() {
 }
 
 async function protectedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (localStorage.getItem(LOGGED_OUT_KEY)) throw new AuthRequiredError()
   if (!accessToken) await refreshAccess()
   const sentToken = accessToken
   try {
@@ -80,6 +82,7 @@ async function authenticate(path: string, credentials: Credentials) {
     method: 'POST', body: JSON.stringify(credentials),
   })
   acceptAccess(result)
+  localStorage.removeItem(LOGGED_OUT_KEY)
   return result.user ?? protectedRequest<UserProfile>('/api/profile/')
 }
 
@@ -92,9 +95,15 @@ export const api = {
     method: 'PATCH', body: JSON.stringify({ first_name: profile.first_name, specialization: profile.specialization, bio: profile.bio, ...(profile.fee === '' ? {} : { fee: profile.fee }) }),
   }),
   async logout() {
-    if (refreshInProgress) await refreshInProgress.catch(() => undefined)
-    await send('/api/logout/', { method: 'POST' })
+    localStorage.setItem(LOGGED_OUT_KEY, 'true')
     accessToken = null
+    if (refreshInProgress) await refreshInProgress.catch(() => undefined)
+    accessToken = null
+    try {
+      await send('/api/logout/', { method: 'POST' })
+    } catch (error) {
+      throw new Error('Вы вышли на этом устройстве, но сервер не подтвердил завершение сессии. ' + (error instanceof Error ? error.message : 'Ошибка сети.'))
+    }
   },
 }
 
