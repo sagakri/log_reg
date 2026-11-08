@@ -1,4 +1,4 @@
-import type { Credentials, ProfileData, UserProfile } from './types'
+import type { Credentials, ProfileData, UserProfile, Specialization } from './types'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'https://inai-col3.fishrungames.com').replace(/\/$/, '')
 let accessToken: string | null = null
@@ -84,11 +84,12 @@ async function authenticate(path: string, credentials: Credentials) {
 }
 
 export const api = {
+  getSpecializations: () => send<Array<{ value: Specialization; label: string }>>('/api/specializations/'),
   register: (credentials: Credentials) => authenticate('/api/register/', credentials),
   login: (credentials: Credentials) => authenticate('/api/login/', credentials),
   getProfile: () => protectedRequest<UserProfile>('/api/profile/'),
   updateProfile: (profile: ProfileData) => protectedRequest<UserProfile>('/api/profile/', {
-    method: 'PATCH', body: JSON.stringify(profile),
+    method: 'PATCH', body: JSON.stringify({ first_name: profile.first_name, specialization: profile.specialization, bio: profile.bio, ...(profile.fee === '' ? {} : { fee: profile.fee }) }),
   }),
   async logout() {
     if (refreshInProgress) await refreshInProgress.catch(() => undefined)

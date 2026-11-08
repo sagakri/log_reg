@@ -2,18 +2,10 @@ import { FormEvent, useEffect, useState } from 'react'
 import { api, AuthRequiredError } from './api'
 import type { Credentials, ProfileData, Specialization, UserProfile } from './types'
 
-const specializations: Array<{ value: Specialization; label: string }> = [
-  { value: 'vocals', label: 'Вокал' },
-  { value: 'guitar', label: 'Гитара' },
-  { value: 'bass', label: 'Бас-гитара' },
-  { value: 'drums', label: 'Ударные' },
-  { value: 'keys', label: 'Клавишные' },
-  { value: 'other', label: 'Другое' },
-]
-
 const emptyProfile: ProfileData = { first_name: '', specialization: 'other', bio: '', fee: '' }
 
 export default function App() {
+  const [specializations, setSpecializations] = useState<Array<{ value: Specialization; label: string }>>([])
   const [user, setUser] = useState<UserProfile | null>(null)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' })
@@ -25,9 +17,12 @@ export default function App() {
   const [feeError, setFeeError] = useState('')
 
   useEffect(() => {
+    api.getSpecializations().then(setSpecializations).catch((err) => {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить специализации.')
+    })
     api.getProfile()
       .then(showProfile)
-      .catch(() => undefined)
+      .catch((err) => { if (!(err instanceof AuthRequiredError)) setError(err instanceof Error ? err.message : 'Не удалось загрузить профиль.') })
       .finally(() => setLoading(false))
   }, [])
 
@@ -150,6 +145,7 @@ export default function App() {
             <label>
               Специализация
               <select value={profile.specialization ?? 'other'} onChange={(event) => setProfile({ ...profile, specialization: event.target.value as Specialization })}>
+                {specializations.length === 0 && <option value={profile.specialization ?? 'other'}>Список специализаций недоступен</option>}
                 {specializations.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
