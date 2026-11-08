@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api } from './api'
+import { api, AuthRequiredError } from './api'
 import type { Credentials, ProfileData, Specialization, UserProfile } from './types'
 
 const specializations: Array<{ value: Specialization; label: string }> = [
@@ -71,6 +71,10 @@ export default function App() {
       showProfile(await api.updateProfile({ ...profile, fee }))
       setMessage('Профиль сохранён.')
     } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        setUser(null)
+        setProfile(emptyProfile)
+      }
       setError(err instanceof Error ? err.message : 'Не удалось сохранить профиль.')
     } finally {
       setSubmitting(false)

@@ -9,6 +9,13 @@ interface TokenPair {
   refresh: string
 }
 
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Сессия завершилась. Войдите снова.')
+    this.name = 'AuthRequiredError'
+  }
+}
+
 function getErrorMessage(data: unknown, fallback: string) {
   if (typeof data === 'string') return data
   if (data && typeof data === 'object') {
@@ -92,14 +99,18 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   if (response.status === 401 && retry && await refreshAccessToken()) {
     return request<T>(path, options, false)
   }
-  if (response.status === 401 && access) clearTokens()
+  if (response.status === 401) {
+    clearTokens()
+    throw new AuthRequiredError()
+  }
   return readResponse<T>(response)
 }
 
 export const api = {
   async register(credentials: Credentials) {
-    await request<unknown>('/api/register/', { method: 'POST', body: JSON.stringify(credentials) })
-    await requestNewTokens(credentials)
+    const result = await request<Partial<TokenPair>>('/api/register/', { method: 'POST', body: JSON.stringify(credentials) })
+    if (result?.access && result?.refresh) saveTokens(result)
+    else await requestNewTokens(credentials)
     return request<UserProfile>('/api/profile/')
   },
   async login(credentials: Credentials) {
