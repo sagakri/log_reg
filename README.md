@@ -13,6 +13,11 @@ npm run dev
 
 ```env
 VITE_API_URL=https://example.com
+# Optional: change these if Swagger documents different paths
+VITE_TOKEN_PATH=/api/token/
+VITE_TOKEN_REFRESH_PATH=/api/token/refresh/
+VITE_REGISTER_PATH=/api/register/
+VITE_PROFILE_PATH=/api/profile/
 ```
 
 ## Сборка

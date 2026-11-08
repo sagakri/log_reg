@@ -1,6 +1,10 @@
 import type { Credentials, ProfileData, UserProfile } from './types'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'https://inai-col3.fishrungames.com').replace(/\/$/, '')
+const TOKEN_PATH = import.meta.env.VITE_TOKEN_PATH ?? '/api/token/'
+const TOKEN_REFRESH_PATH = import.meta.env.VITE_TOKEN_REFRESH_PATH ?? '/api/token/refresh/'
+const REGISTER_PATH = import.meta.env.VITE_REGISTER_PATH ?? '/api/register/'
+const PROFILE_PATH = import.meta.env.VITE_PROFILE_PATH ?? '/api/profile/'
 const ACCESS_TOKEN_KEY = 'band-members-access-token'
 const REFRESH_TOKEN_KEY = 'band-members-refresh-token'
 
@@ -50,7 +54,7 @@ function clearTokens() {
 }
 
 async function requestNewTokens(credentials: Credentials) {
-  const tokens = await readResponse<TokenPair>(await fetch(`${API_URL}/api/token/`, {
+  const tokens = await readResponse<TokenPair>(await fetch(`${API_URL}${TOKEN_PATH}`, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(credentials),
@@ -68,7 +72,7 @@ async function refreshAccessToken(): Promise<boolean> {
   if (!refreshInProgress) {
     refreshInProgress = (async () => {
       try {
-        const tokens = await readResponse<Partial<TokenPair>>(await fetch(`${API_URL}/api/token/refresh/`, {
+        const tokens = await readResponse<Partial<TokenPair>>(await fetch(`${API_URL}${TOKEN_REFRESH_PATH}`, {
           method: 'POST',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
           body: JSON.stringify({ refresh }),
@@ -108,18 +112,18 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
 
 export const api = {
   async register(credentials: Credentials) {
-    const result = await request<Partial<TokenPair>>('/api/register/', { method: 'POST', body: JSON.stringify(credentials) })
+    const result = await request<Partial<TokenPair>>(REGISTER_PATH, { method: 'POST', body: JSON.stringify(credentials) })
     if (result?.access && result?.refresh) saveTokens(result)
     else await requestNewTokens(credentials)
-    return request<UserProfile>('/api/profile/')
+    return request<UserProfile>(PROFILE_PATH)
   },
   async login(credentials: Credentials) {
     await requestNewTokens(credentials)
-    return request<UserProfile>('/api/profile/')
+    return request<UserProfile>(PROFILE_PATH)
   },
-  getProfile: () => request<UserProfile>('/api/profile/'),
+  getProfile: () => request<UserProfile>(PROFILE_PATH),
   updateProfile: (profile: ProfileData) =>
-    request<UserProfile>('/api/profile/', { method: 'PATCH', body: JSON.stringify(profile) }),
+    request<UserProfile>(PROFILE_PATH, { method: 'PATCH', body: JSON.stringify(profile) }),
   logout() {
     clearTokens()
   },
