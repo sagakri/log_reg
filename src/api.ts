@@ -1,17 +1,11 @@
 import type { Credentials, ProfileData, UserProfile } from './types'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'https://inai-col3.fishrungames.com').replace(/\/$/, '')
-const TOKEN_PATH = import.meta.env.VITE_TOKEN_PATH ?? '/api/token/'
-const TOKEN_REFRESH_PATH = import.meta.env.VITE_TOKEN_REFRESH_PATH ?? '/api/token/refresh/'
-const REGISTER_PATH = import.meta.env.VITE_REGISTER_PATH ?? '/api/register/'
-const PROFILE_PATH = import.meta.env.VITE_PROFILE_PATH ?? '/api/profile/'
-const ACCESS_TOKEN_KEY = 'band-members-access-token'
-const REFRESH_TOKEN_KEY = 'band-members-refresh-token'
-
-interface TokenPair {
-  access: string
-  refresh: string
-}
+let accessToken: string | null = null
+let refreshInProgress: Promise<void> | null = null
+localStorage.removeItem('band-members-access-token')
+localStorage.removeItem('band-members-refresh-token')
+localStorage.removeItem('band-members-session-id')
 
 export class AuthRequiredError extends Error {
   constructor() {
@@ -20,111 +14,86 @@ export class AuthRequiredError extends Error {
   }
 }
 
-function getErrorMessage(data: unknown, fallback: string) {
-  if (typeof data === 'string') return data
-  if (data && typeof data === 'object') {
-    return Object.values(data as Record<string, unknown>)
-      .flatMap((value) => (Array.isArray(value) ? value : [value]))
-      .map(String)
-      .join(' ')
-  }
-  return fallback
-}
-
-async function readResponse<T>(response: Response): Promise<T> {
+async function send<T>(path: string, options: RequestInit = {}, authenticated = false): Promise<T> {
+  const headers = new Headers(options.headers)
+  headers.set('Accept', 'application/json')
+  if (options.body) headers.set('Content-Type', 'application/json')
+  if (authenticated && accessToken && path !== '/api/token/refresh/') headers.set('Authorization', `Bearer ${accessToken}`)
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' })
+  if (response.status === 401 && authenticated) throw new AuthRequiredError()
   const text = await response.text()
-  let data: unknown = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    data = text
+  let data: unknown
+  try { data = text ? JSON.parse(text) : null } catch { data = null }
+  if (!response.ok) {
+    const details = data && typeof data === 'object'
+      ? Object.values(data).flat().map(String).join(' ')
+      : ''
+    throw new Error(response.status >= 500
+      ? `Сервер временно недоступен (HTTP ${response.status}). Попробуйте позже.`
+      : details || `Не удалось выполнить запрос (HTTP ${response.status}).`)
   }
-  if (!response.ok) throw new Error(getErrorMessage(data, 'Не удалось выполнить запрос.'))
   return data as T
 }
 
-function saveTokens(tokens: Partial<TokenPair>) {
-  if (tokens.access) localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access)
-  if (tokens.refresh) localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh)
+function acceptAccess(result: { access: string }) {
+  if (!result || typeof result.access !== 'string' || !result.access) {
+    throw new Error('Сервер не вернул access token.')
+  }
+  accessToken = result.access
 }
 
-function clearTokens() {
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
-}
-
-async function requestNewTokens(credentials: Credentials) {
-  const tokens = await readResponse<TokenPair>(await fetch(`${API_URL}${TOKEN_PATH}`, {
-    method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify(credentials),
-  }))
-  if (!tokens?.access || !tokens?.refresh) throw new Error('Сервер не вернул пару JWT-токенов.')
-  saveTokens(tokens)
-}
-
-let refreshInProgress: Promise<boolean> | null = null
-
-async function refreshAccessToken(): Promise<boolean> {
-  const refresh = localStorage.getItem(REFRESH_TOKEN_KEY)
-  if (!refresh) return false
-
+async function refreshAccess() {
   if (!refreshInProgress) {
     refreshInProgress = (async () => {
       try {
-        const tokens = await readResponse<Partial<TokenPair>>(await fetch(`${API_URL}${TOKEN_REFRESH_PATH}`, {
-          method: 'POST',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh }),
-        }))
-        if (!tokens.access) return false
-        saveTokens(tokens)
-        return true
-      } catch {
-        return false
+        acceptAccess(await send<{ access: string }>('/api/token/refresh/', { method: 'POST' }, true))
+      } catch (error) {
+        if (error instanceof AuthRequiredError) accessToken = null
+        throw error
       } finally {
         refreshInProgress = null
       }
     })()
   }
-
-  return refreshInProgress
+  await refreshInProgress
 }
 
-async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
-  const headers = new Headers(options.headers)
-  headers.set('Accept', 'application/json')
-  if (options.body) headers.set('Content-Type', 'application/json')
-
-  const access = localStorage.getItem(ACCESS_TOKEN_KEY)
-  if (access) headers.set('Authorization', `Bearer ${access}`)
-
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers })
-  if (response.status === 401 && retry && await refreshAccessToken()) {
-    return request<T>(path, options, false)
+async function protectedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (!accessToken) await refreshAccess()
+  const sentToken = accessToken
+  try {
+    return await send<T>(path, options, true)
+  } catch (error) {
+    if (!(error instanceof AuthRequiredError)) throw error
+    if (accessToken === sentToken) await refreshAccess()
+    try {
+      return await send<T>(path, options, true)
+    } catch (retryError) {
+      if (retryError instanceof AuthRequiredError) accessToken = null
+      throw retryError
+    }
   }
-  if (response.status === 401) {
-    clearTokens()
-    throw new AuthRequiredError()
-  }
-  return readResponse<T>(response)
+}
+
+async function authenticate(path: string, credentials: Credentials) {
+  const result = await send<{ access: string; user?: UserProfile }>(path, {
+    method: 'POST', body: JSON.stringify(credentials),
+  })
+  acceptAccess(result)
+  return result.user ?? protectedRequest<UserProfile>('/api/profile/')
 }
 
 export const api = {
-  async register(credentials: Credentials) {
-    const result = await request<Partial<TokenPair>>(REGISTER_PATH, { method: 'POST', body: JSON.stringify(credentials) })
-    if (result?.access && result?.refresh) saveTokens(result)
-    else await requestNewTokens(credentials)
-    return request<UserProfile>(PROFILE_PATH)
-  },
-  async login(credentials: Credentials) {
-    await requestNewTokens(credentials)
-    return request<UserProfile>(PROFILE_PATH)
-  },
-  getProfile: () => request<UserProfile>(PROFILE_PATH),
-  updateProfile: (profile: ProfileData) =>
-    request<UserProfile>(PROFILE_PATH, { method: 'PATCH', body: JSON.stringify(profile) }),
-  logout() {
-    clearTokens()
+  register: (credentials: Credentials) => authenticate('/api/register/', credentials),
+  login: (credentials: Credentials) => authenticate('/api/login/', credentials),
+  getProfile: () => protectedRequest<UserProfile>('/api/profile/'),
+  updateProfile: (profile: ProfileData) => protectedRequest<UserProfile>('/api/profile/', {
+    method: 'PATCH', body: JSON.stringify(profile),
+  }),
+  async logout() {
+    if (refreshInProgress) await refreshInProgress.catch(() => undefined)
+    await send('/api/logout/', { method: 'POST' })
+    accessToken = null
   },
 }
+

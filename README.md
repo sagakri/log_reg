@@ -1,39 +1,22 @@
-# Band Members client
+# Band Members
 
-React-клиент для регистрации и личного кабинета музыканта с JWT-аутентификацией.
+React / Vite клиент для https://inai-col3.fishrungames.com.
 
-## Запуск
+Запуск: `npm install`, `npm run dev`. Проверка и сборка: `npm run build`.
+Переопределить сервер можно через `VITE_API_URL` в `.env.local`.
 
-```bash
-npm install
-npm run dev
-```
+## Авторизация
 
-Приложение по умолчанию обращается к `https://inai-col3.fishrungames.com`. Чтобы использовать другой сервер, создайте файл `.env.local`:
+Контракт проверен по `/api/schema/`:
+- POST `/api/register/` и `/api/login/`: username/password; access и необязательный user в JSON, refresh в HttpOnly cookie.
+- POST `/api/token/refresh/`: refresh передаётся браузером в cookie, тело запроса не требуется.
+- GET/PATCH `/api/profile/`: Authorization: Bearer access.
+- POST `/api/logout/`: сервер удаляет refresh cookie.
 
-```env
-VITE_API_URL=https://example.com
-# Optional: change these if Swagger documents different paths
-VITE_TOKEN_PATH=/api/token/
-VITE_TOKEN_REFRESH_PATH=/api/token/refresh/
-VITE_REGISTER_PATH=/api/register/
-VITE_PROFILE_PATH=/api/profile/
-```
+Все запросы используют credentials: include. Access хранится в памяти, после перезагрузки восстанавливается через refresh. Старые токены из localStorage удаляются. Одновременные запросы используют одно обновление токена; защищённый запрос повторяется не более одного раза. Ошибки сервера показываются понятным сообщением без HTML.
 
-## Сборка
+Для работы между GitHub Pages и API сервер должен разрешать Origin https://sagakri.github.io и credentials; cookie должна поддерживать межсайтовые запросы (SameSite=None; Secure). Блокировка сторонних cookie браузером может препятствовать восстановлению сессии.
 
-```bash
-npm run build
-```
+## Публикация
 
-## GitHub Pages
-
-В репозитории уже есть workflow `.github/workflows/deploy.yml`. После отправки проекта в ветку `main`:
-
-1. Откройте **Settings → Pages** в репозитории.
-2. В разделе **Build and deployment** выберите источник **GitHub Actions**.
-3. Дождитесь завершения workflow во вкладке **Actions**.
-
-Клиент ожидает SimpleJWT маршруты `POST /api/token/` (поля `access` и `refresh`) и `POST /api/token/refresh/` (поле `refresh`), а регистрацию и профиль вызывает через `/api/register/` и `/api/profile/`. Access token отправляется в заголовке `Authorization: Bearer ...`; при ответе `401` клиент один раз обновляет его и повторяет запрос. Выход удаляет токены на клиенте.
-
-Эти маршруты основаны на типичном контракте SimpleJWT и прежних маршрутах профиля. Swagger-схема нового сервера не была доступна во время реализации, поэтому перед публикацией нужно сверить точные пути и поля с `/api/docs/`. Если API не разрешает запросы с домена `*.github.io`, адрес GitHub Pages нужно добавить в CORS-настройки бэкенда.
+Push в main запускает `.github/workflows/deploy.yml`. В GitHub Pages источником должен быть GitHub Actions.
